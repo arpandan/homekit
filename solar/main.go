@@ -26,8 +26,8 @@ func main() {
 	)
 
 	kingpin.MustParse(app.Parse(os.Args[1:]))
-
-	efergyClient := NewEfergyClient(*accessToken, log.WithField("component", "efergy-client"))
+	refresh := time.Second * time.Duration(*refreshInt)
+	efergyClient := NewEfergyClient(*accessToken, refresh, log.WithField("component", "efergy-client"))
 
 	info := accessory.Info{
 		Name:         "EfergyBridge",
@@ -40,13 +40,13 @@ func main() {
 	a.AddService(svc.Service)
 
 	var timer *time.Timer
-	refresh := time.Second * time.Duration(*refreshInt)
-	timer = time.AfterFunc(refresh, func() {
-		svc.Update()
-		timer.Reset(refresh)
-	})
 
-	svc.Update()
+	// timer = time.AfterFunc(refresh, func() {
+	// 	svc.Update()
+	// 	timer.Reset(refresh)
+	// })
+
+	// svc.Update()
 
 	t, err := hc.NewIPTransport(hc.Config{Pin: *accessCode, Port: *port}, a)
 	if err != nil {

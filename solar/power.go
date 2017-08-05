@@ -85,6 +85,10 @@ func NewPowerService(name string, efergyClient *EfergyClient, log *logrus.Entry)
 	svc.AddCharacteristic(batteryInput.Characteristic)
 	svc.AddCharacteristic(mainsOutput.Characteristic)
 
+	go func() {
+
+	}()
+
 	return &PowerService{
 		Service:      svc,
 		EfergyClient: efergyClient,

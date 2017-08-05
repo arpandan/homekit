@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync"
+	"time"
 
 	"github.com/Sirupsen/logrus"
 )
@@ -11,8 +13,9 @@ import (
 const readingsEndpointFmt = "https://engage.efergy.com/mobile_proxy/getCurrentValuesSummary?token=%s"
 
 type EfergyClient struct {
-	token string
-	log   *logrus.Entry
+	token           string
+	log             *logrus.Entry
+	refreshInterval time.Duration
 }
 
 type Reading struct {
@@ -34,14 +37,71 @@ func (reading *Reading) ParseLastValue() {
 	}
 }
 
-func NewEfergyClient(token string, log *logrus.Entry) *EfergyClient {
+func NewEfergyClient(token string, refreshInterval time.Duration, log *logrus.Entry) *EfergyClient {
 	return &EfergyClient{
-		token: token,
-		log:   log,
+		token:           token,
+		log:             log,
+		refreshInterval: refreshInterval,
 	}
 }
 
-func (client *EfergyClient) GetLatestReadings() ([]*Reading, error) {
+type Subscription struct {
+	readings chan []*Reading
+	quitChan chan struct{}
+	wg       sync.WaitGroup
+
+	client *EfergyClient
+}
+
+func (e *EfergyClient) Subscribe() *Subscription {
+	s := &Subscription{
+		readings: make(chan []*Reading),
+		quitChan: make(chan struct{}),
+		wg:       sync.WaitGroup{},
+		client:   e,
+	}
+
+	go func() {
+		ticker := time.NewTicker(e.refreshInterval)
+		for {
+			select {
+			case <-ticker.C:
+				readings, err := e.getReadings()
+				if err != nil {
+					log.Error(err)
+				}
+				s.write(readings)
+			case <-s.quitChan:
+				ticker.Stop()
+			}
+		}
+	}()
+
+	return s
+}
+
+func (s *Subscription) Readings() <-chan []*Reading {
+	return s.readings
+}
+
+func (s *Subscription) write(reading []*Reading) {
+	s.wg.Add(1)
+	defer s.wg.Done()
+	s.readings <- reading
+}
+
+func (s *Subscription) Close() {
+	select {
+	default:
+		close(s.quitChan)
+
+		// Wait for write operations to complete.
+		s.wg.Wait()
+		close(s.readings)
+	}
+}
+
+func (client *EfergyClient) getReadings() ([]*Reading, error) {
 	resp, err := http.Get(fmt.Sprintf(readingsEndpointFmt, client.token))
 	if resp.StatusCode != http.StatusOK {
 		return nil, err
