@@ -31,7 +31,7 @@
 
 [[constraint]]
   name = "github.com/eclipse/paho.mqtt.golang"
-  version = "1.1.0"
+  revision = "e9f694b2eba2cc7e1eeec8e488415d00587f508a"
 
 [[constraint]]
   name = "gopkg.in/alecthomas/kingpin.v2"
